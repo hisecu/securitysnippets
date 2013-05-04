@@ -1,0 +1,175 @@
+#!/usr/bin/perl -wT
+#
+# HiSeCu Security related code snippet
+#
+# This code can be used to monitor security patches that must be applied on SLES (SuSE Linux Enterprise) Servers with Xymon.
+# It may be useful for other types of SuSe Linux servers as well, or other monitoring tools.
+#
+# Often, software is too tailor-made to be useful for others, but snippets of the code could be useful.
+#
+# (C) 2013 Nomeka [tm] / HiSeCU, CC-By-SA 3.0
+#
+# Feel free to use this code in your software, it is free, as long as you keep the comments in place, including the copyright notice
+#
+# Carel Fenijn <snippets@hisecu.org>, May 2013.
+#
+
+use strict;
+use warnings;
+use HTML::Entities;
+
+$ENV{PATH}="";
+$ENV{ENV}="";
+
+#
+# ------------------ Mainly Declarations and Global Data Structures --------------
+#
+
+
+my $security_patches_must_be_checked=1;
+my $security_patch_details_must_be_shown=1;
+
+my $color="green";             # init - default
+my $data_str="This is only a code snippet, it could be integrated in a Xymon script\n";
+
+my $zypper_command='/usr/bin/zypper';
+my $zypper_patches_amount_options='-n pchk';
+my $zypper_security_patches_options='-n lp --issue=security';
+my $zypper_patchinfo_options='-n patch-info';
+
+
+#
+# --------------------------- Main Program -------------------------------
+#
+
+
+if($security_patches_must_be_checked)
+{
+  check_security_patches();
+}
+
+# Normally, the data string would be sent to the Xymon server with the bbcmd command
+# Here we print it to STDOUT
+
+print("Color: $color\n");
+print("$data_str\n");
+
+
+#
+# --------------------------- Subroutines ------------------------------
+#
+
+
+sub check_security_patches
+#
+# (C) 2013 Nomeka [tm] / HiSeCU, CC-By-SA 3.0
+# Feel free to use this code in your software, it is free, as long as you keep the comments in place, including the copyright notice
+# Carel Fenijn <snippets@hisecu.org>, May 2013.
+#
+{
+  my $amount_of_security_patches_needed=0;           # init
+  if(-x "$zypper_command")
+  {
+    local *ZYPF;
+    if(!(open(ZYPF,"$zypper_command $zypper_patches_amount_options |")))
+    {
+      $color="red";
+      $data_str.="Error: Could not pipe $zypper_command $zypper_patches_amount_options: $!\n";
+      return;
+    }
+    while(my $zyp_l=<ZYPF>)
+    {
+      if($zyp_l=~/^\s*(\d+)\s+patches\s+needed\s+\((\d+)\s+security\s+patch.*\)/i)
+      {
+        my $total_amount_of_patches_needed=$1;
+        $amount_of_security_patches_needed=$2;
+        $color="red";
+        if($amount_of_security_patches_needed==1)
+        {
+          $data_str.="Error: $amount_of_security_patches_needed security patch needed.\n";
+        } 
+        else
+        {
+          $data_str.="Error: $amount_of_security_patches_needed security patches needed.\n";
+        }
+      }
+    }
+    close(ZYPF);
+
+    if($amount_of_security_patches_needed > 0)
+    {
+      if(!(open(ZYPF,"$zypper_command $zypper_security_patches_options |")))
+      {
+        $color="red";
+        $data_str.="Error: Could not pipe $zypper_command $zypper_security_patches_options: $!\n";
+        return;
+      }
+      my @security_patch_ary=();          # init
+      $data_str.="The following is output of the command $zypper_command $zypper_security_patches_options:\n";
+      $data_str.="--------------------------------------------------------------------------------\n";
+      ZYPLOOP: while(my $zyp_l=<ZYPF>)
+      {
+        if($zyp_l=~/Authentication\s+required\s+/i ||   # We may use higher privileges at a later point but ignore them for now
+           $zyp_l=~/Loading\s+repository\s+data/i ||
+           $zyp_l=~/Abort,\s+retry,\s+ignore/i ||
+           $zyp_l=~/out-of-date/i ||
+           $zyp_l=~/Reading\s+installed\s+packages/i)
+        {
+          next ZYPLOOP;
+        }
+        if($zyp_l=~/^\s*(\S+)\s*\|\s*\d+\s*\|\s*security\s*\|/i)
+        {
+          my $package_name=$1;
+          push(@security_patch_ary,$package_name);
+        }
+        $zyp_l=encode_entities($zyp_l); 
+        $zyp_l=~s/\&amp\;amp\.*//g;    # Perhaps a bug in encode_entities(), removing weird output
+        $data_str.=$zyp_l;
+      }
+      close(ZYPF);
+      $data_str.="--------------------------------------------------------------------------------\n";
+      if($security_patch_details_must_be_shown)
+      {
+        foreach my $package_name (@security_patch_ary)
+        {
+          local *PATCHDETAILF;
+          if(!(open(PATCHDETAILF,"$zypper_command $zypper_patchinfo_options $package_name |")))
+          {
+            $color="red";
+            $data_str.="Error: Could not pipe $zypper_command $zypper_patchinfo_options $package_name: $!\n";
+            return;
+          }
+          $data_str.="- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -\n";
+          $data_str.="The following is output of the command $zypper_command $zypper_patchinfo_options $package_name:\n";
+          PATCHDETAILLOOP: while(my $l=<PATCHDETAILF>)
+          {
+            if($l=~/Authentication\s+required\s+/i ||   # We may use higher privileges at a later point but ignore them for now
+               $l=~/Loading\s+repository\s+data/i ||
+               $l=~/Abort,\s+retry,\s+ignore/i ||
+               $l=~/out-of-date/i ||
+               $l=~/Reading\s+installed\s+packages/i)
+            {
+              next PATCHDETAILLOOP;
+            }
+            $l=encode_entities($l);
+            $l=~s/\&amp\;amp\.*//g;    # Perhaps a bug in encode_entities(), removing weird output
+            $data_str.=$l;
+          }
+          close(PATCHDETAILF);
+          $data_str.="- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -\n";
+        }
+      }
+    }
+    else
+    {
+      $data_str.="Good: No security patches that must be applied found, according to $zypper_command $zypper_patches_amount_options\n";
+    }
+  }
+  else
+  {
+    $color="red";
+    $data_str.="Error: Not an executable: $zypper_command or no sufficient permissions to run it.\n";
+  }
+}
+
+
