@@ -1,8 +1,6 @@
 securitysnippets
 ================
 
-Note: the actual code is forthcoming!
-
 HiSeCu Security related code snippets 
 
 Often, software is too tailor-made to be useful for others, but snippets of the code could be useful.
