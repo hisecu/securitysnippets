@@ -1,11 +1,11 @@
 securitysnippets
 ================
 
-HiSeCu Security related Perl snippets 
+HiSeCu Security related code snippets 
 
 Often, software is too tailor-made to be useful for others, but snippets of the code could be useful.
 
-This repo contains Security related Perl snippets
+This repo contains Security related code snippets
 
 (C) 2013 Nomeka [tm] / HiSeCU, CC-By-SA 3.0
 
