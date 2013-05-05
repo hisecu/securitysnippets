@@ -1,0 +1,204 @@
+#!/usr/bin/perl -wT
+#
+# HiSeCu Security related code snippet
+# 
+# This code can be used to monitor auditd related things on linux servers. It was written for use
+# on SLES systems in Xymon plugins, but may be useful for other distro's and monitoring tools as well.
+# 
+# Often, software is too tailor-made to be useful for others, but snippets of the code could be useful.
+# 
+# (C) 2013 Nomeka [tm] / HiSeCU, CC-By-SA 3.0
+# 
+# Feel free to use this code in your software, it is free, as long as you keep the comments in place, including the copyright notice
+# 
+# Carel Fenijn <snippets@hisecu.org>, May 2013.
+#
+
+use strict;
+use warnings;
+use HTML::Entities;
+
+$ENV{PATH}="";
+$ENV{ENV}="";
+
+# 
+# ------------------ Mainly Declarations and Global Data Structures --------------
+#
+
+
+my $auditd_must_be_checked=1;
+my $auditd_config_file="/etc/audit/auditd.conf";
+my $auditd_cumulative_log_file_max_size_bytes=10000000;
+
+my $color="green";             # init - default
+my $data_str="This is only a code snippet, it could be integrated in a Xymon script\n\n";
+
+my $chkconfig_command="/sbin/chkconfig";
+my $aureport_command="/sbin/aureport";
+my $ausearch_command="/sbin/ausearch";
+my $auditctl_command="/sbin/auditctl";
+
+my $aureport_command_options="";
+
+
+# 
+# --------------------------- Main Program -------------------------------
+#
+
+if($auditd_must_be_checked)
+{ 
+  check_auditd();
+}
+
+# Normally, the data string would be sent to the Xymon server with the bbcmd command
+# Here we print it to STDOUT
+
+print("Color: $color\n");
+$data_str=encode_entities($data_str);
+print("$data_str\n");
+
+
+sub check_auditd
+#
+# (C) 2013 Nomeka [tm] / HiSeCU, CC-By-SA 3.0
+# Feel free to use this code in your software, it is free, as long as you keep the comments in place, including the copyright notice
+# Carel Fenijn <snippets@hisecu.org>, May 2013.
+#
+{
+  if(-x "$chkconfig_command")
+  {
+    my $auditd_chkconfig_status=`$chkconfig_command auditd`;
+    $auditd_chkconfig_status=~s/\s+$//g;
+    if($auditd_chkconfig_status=~/auditd\s+on/i)
+    {
+      $data_str.="Good: chkconfig service is on according to $chkconfig_command auditd\n";
+    }
+    else
+    {
+      $color="red";
+      $data_str.="Error: chkconfig service is not on according to $chkconfig_command auditd: $auditd_chkconfig_status\n";
+    }
+  }
+  else
+  {
+    $color="red";
+    $data_str.="Error: Not an executable: $chkconfig_command or no sufficient permissions to run it.\n";
+  }
+  if(-x "$auditctl_command")
+  {
+    my $auditctl_status=`$auditctl_command -s`;
+    $auditctl_status=~s/\s+$//g;
+    if($auditctl_status=~/AUDIT_STATUS:\s+enabled=0/i)
+    {
+      $color="red";
+      $data_str.="Error: auditd is not enabled according to $auditctl_command -s You could enable it e.g. with $auditctl_command -s 1\n";
+    }
+    else
+    {
+      $data_str.="Good: auditd  is enabled according to $auditctl_command -s\n";
+    }
+    my $auditctl_rules_status=`$auditctl_command -l`;
+    $auditctl_rules_status=~s/\s+$//g;
+    if($auditctl_rules_status=~/^No\s+rules/i)
+    {
+      $color="red";
+      $data_str.="Error: There are no auditd rules according to $auditctl_command -l\n";
+    }
+    else
+    {
+      $data_str.="Good: There are auditd rules according to $auditctl_command -l\n";
+    }
+  }
+  else
+  {
+    $color="red";
+    $data_str.="Error: Not an executable: $auditctl_command or no sufficient permissions to run it.\n";
+  }
+  if(-x "$aureport_command")
+  {
+    local *AUREPF;
+    if(!(open(AUREPF,"$aureport_command |")))
+    {
+      $color="red";
+      $data_str.="Error: Could not pipe $aureport_command: $!\n";
+    }
+    else
+    {
+      AUREPLINE: while(my $aurep_l=<AUREPF>)
+      {
+        if($aurep_l=~/^\s*(Number\s+of.*)\:\s+(\d+)/)
+        {
+          my $key=$1;
+          my $value=$2;
+          next AUREPLINE if $value==0;
+          $data_str.="$aurep_l";
+        }      
+        else
+        {
+          $data_str.="$aurep_l";
+        }
+      }
+      close(AUREPF);
+    }
+  }
+  else
+  {
+    $color="red";
+    $data_str.="Error: Not an executable: $aureport_command or insufficient permissions to run it.\n";
+  }
+  if(-T $auditd_config_file)
+  {
+    if(!(open(AUDITDCONFF,"$auditd_config_file")))
+    {
+      $color="red";
+      $data_str.="Error: Could not open $auditd_config_file for reading: $!";
+    }
+    else
+    {
+      while(my $l=<AUDITDCONFF>)
+      {
+        if($l=~/^\s*log_file\s*=\s*(\S+)\s*$/)
+        {
+          my $auditd_log_file=$1;
+          if(-f "$auditd_log_file")
+          {
+            my $auditd_cumulative_found_log_file_size_bytes=0;              # init
+            if($auditd_log_file=~/^(.*\/)([^\/]+)$/)
+            {
+              my $auditd_log_path=$1;
+              my $bare_auditd_log_file=$2;
+              my @files_ary = <$auditd_log_path*log*>;
+              foreach my $file (@files_ary)
+              {
+                my($dev,$ino,$mode,$nlink,$uid,$gid,$rdev,$found_auditd_log_file_size,$atime,$mtime,$ctime,$blksize,$blocks)=stat($auditd_log_file);
+                $auditd_cumulative_found_log_file_size_bytes+=$found_auditd_log_file_size;
+              }
+              if($auditd_cumulative_found_log_file_size_bytes > $auditd_cumulative_log_file_max_size_bytes)
+              {
+                $color="red";
+                $data_str.="Error: log files $auditd_log_file and similar larger than $auditd_cumulative_log_file_max_size_bytes bytes.\n";
+                $data_str.="The sizes of the following log files in $auditd_log_path were checked:\n";
+                foreach my $file (@files_ary)
+                {
+                  $data_str.="    $file\n";
+                }
+              }
+            }
+          }
+          else
+          {
+            $color="red";
+            $data_str.="Error: auditd log file $auditd_log_file as declared in $auditd_config_file not found\n";
+          }
+        }
+      }
+      close(AUDITDCONFF);
+    }
+  }
+  else
+  {
+    $color="red";
+    $data_str.="Error: auditd config file not a text file: $auditd_config_file\n";
+  }
+}
+
