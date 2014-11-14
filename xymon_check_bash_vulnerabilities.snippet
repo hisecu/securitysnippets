@@ -1,3 +1,59 @@
+#!/usr/bin/perl -wT
+#
+# HiSeCu Security related code snippet
+# 
+# This code can be used to monitor auditd related things on linux servers. It was written for use
+# on SLES systems in Xymon plugins, but may be useful for other distro's and monitoring tools as well.
+# 
+# Often, software is too tailor-made to be useful for others, but snippets of the code could be useful.
+# 
+# (C) 2014 Nomeka [tm] / HiSeCU, CC-By-SA 3.0
+# 
+# Feel free to use this code in your software, it is free, as long as you keep the comments in place, including the copyright notice
+# 
+# Carel Fenijn <snippets@hisecu.org>, September 2014.
+#
+
+use strict;
+use warnings;
+use HTML::Entities;
+
+$ENV{PATH}="";
+$ENV{ENV}="";
+
+# 
+# ------------------ Mainly Declarations and Global Data Structures --------------
+#
+
+
+my $bash_vulnerabilities_must_be_checked=1;
+
+my $color="green";             # init - default
+my $data_str="This is only a code snippet, it could be integrated in a Xymon script\n\n";
+
+
+# 
+# --------------------------- Main Program -------------------------------
+#
+
+if($bash_vulnerabilities_must_be_checked)
+{ 
+  check_bash_vulnerabilities();
+}
+
+
+# Normally, the data string would be sent to the Xymon server with the bbcmd command
+# Here we print it to STDOUT
+
+print("Color: $color\n");
+$data_str=encode_entities($data_str);
+print("$data_str\n");
+
+#
+# -------------------------------- Subroutines -----------------------------
+#
+
+
 sub check_bash_vulnerabilities
 #
 # In this subroutine, any bash vulnerability checks may be covered.
