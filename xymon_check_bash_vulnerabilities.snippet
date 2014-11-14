@@ -1,0 +1,39 @@
+sub check_bash_vulnerabilities
+#
+# In this subroutine, any bash vulnerability checks may be covered.
+# We start with CVE-2014-6271
+#
+{
+  my @bash_binary_ary=();     # init, this will contain all actual executable binaries. TODO: Deal with symlinks
+  foreach my $bin_path ("/bin","/usr/bin","/usr/local/bin")
+  {
+    if(-x "$bin_path/bash")
+    {
+      push(@bash_binary_ary,"$bin_path/bash");
+    }
+  }
+  foreach my $bash_binary (@bash_binary_ary)
+  {
+    local *BASHOUTPUTF;
+    if(open(BASHOUTPUTF,"env x\=\'\(\) \{ \:\;\}\; echo vulnerable\' $bash_binary \-c \"echo test of CVE-2014-6271 bash vulnerability\" |"))
+    {
+      my $bashoutput_l=<BASHOUTPUTF>;
+      if($bashoutput_l=~/vulnerable/)
+      {
+        $color="red";
+        $data_str.="Error: Bash vulnerability CVE-2014-6271 detected.\n";
+        $data_str.="  Please update bash, e.g. with this command: zypper update bash.\n";
+      }
+      else
+      {
+        $data_str.="Good: Bash vulnerability CVE-2014-6271 NOT detected.\n";
+      }
+      close(BASHOUTPUTF);
+    }
+    else
+    {
+      $color="red";
+      $data_str.="Error: Could not pipe env x\=\'\(\) \{ \:\;\}\; echo vulnerable\' $bash_binary \-c \"echo this is a test\": $!\n";
+    }
+  }
+}
