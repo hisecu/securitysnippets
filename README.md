@@ -12,4 +12,4 @@ This repo contains Security related code snippets
 Feel free to use this code in your software, it is free, as long as you keep the comments in place,
 including the copyright notice
 
-Carel Fenijn 
+C Fenijn 
